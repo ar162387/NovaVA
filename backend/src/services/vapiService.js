@@ -260,7 +260,7 @@ class VapiService {
           voiceId: options.voiceId || 'enhanced-natural',
           method: 'enhanced-browser-tts',
           voiceSettings: {
-            rate: 0.85, // Slightly slower for more natural speech
+            rate: 0.95, // Slightly slower for more natural speech
             pitch: 1.0, // Normal pitch
             volume: 1.0, // Full volume
             lang: 'en-US', // English US locale

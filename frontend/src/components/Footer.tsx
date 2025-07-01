@@ -1,5 +1,5 @@
 import React from 'react'
-import { Heart, Github, ExternalLink } from 'lucide-react'
+import { Heart, Github } from 'lucide-react'
 
 const Footer: React.FC = () => {
   const currentYear = new Date().getFullYear()
@@ -22,16 +22,11 @@ const Footer: React.FC = () => {
 
           {/* Right Side - Links */}
           <div className="flex items-center gap-4">
-            {/* GitHub Link (placeholder) */}
+            {/* GitHub Link */}
             <a
-              href="#"
+              href="https://github.com/ar162387/NovaVA.git"
               className="flex items-center gap-1.5 text-sm text-secondary-600 hover:text-secondary-800 transition-colors"
               title="View Source Code"
-              onClick={(e) => {
-                e.preventDefault()
-                // TODO: Add actual GitHub repository link
-                console.log('GitHub link clicked')
-              }}
             >
               <Github className="w-4 h-4" />
               <span className="hidden sm:inline">Source</span>

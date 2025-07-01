@@ -1,5 +1,5 @@
 import React from 'react'
-import { MessageSquare, Settings, HelpCircle } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 
 interface HeaderProps {
   connectionStatus?: React.ReactNode
