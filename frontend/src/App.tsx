@@ -307,6 +307,11 @@ function App() {
    * Error screen
    */
   if (appState.error) {
+    // Log detailed error info for debugging
+    console.error('NovaVA Connection Error:', {
+      errorMessage: appState.error,
+      healthStatus: appState.healthStatus
+    })
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="card max-w-md w-full text-center">

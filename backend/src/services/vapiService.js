@@ -266,7 +266,7 @@ class VapiService {
     const { elevenlabs } = config;
     
     // Check if ElevenLabs is configured
-    if (!elevenlabs.apiKey) {
+    if (!elevenlabs.) {
       console.warn('⚠️ ElevenLabs API key not configured');
       return { success: false, error: 'ElevenLabs API key not configured' };
     }
