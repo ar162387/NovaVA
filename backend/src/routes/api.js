@@ -27,35 +27,88 @@ import { vapiService } from '../services/vapiService.js';
 const router = express.Router();
 
 /**
- * API Information Endpoint
+ * API Health Check Endpoint
  * 
  * ENDPOINT: GET /api
- * PURPOSE: Provides API documentation and server information
- * USAGE: Health checks, frontend connectivity testing, API discovery
+ * PURPOSE: Dynamic health check with real external API connectivity testing
+ * USAGE: Frontend connection status, service monitoring, debugging
+ * 
+ * HEALTH CHECK FEATURES:
+ * - Tests actual Vapi API (OpenAI/GPT-4o) connectivity
+ * - Tests actual ElevenLabs TTS API connectivity
+ * - Returns detailed status for each service
+ * - Provides error messages for troubleshooting
+ * - Dynamic status: healthy, degraded, or critical
  * 
  * RESPONSE STRUCTURE:
- * - API metadata (name, version, description)
- * - Available endpoints documentation
- * - Server timestamp for connectivity verification
- * - Used by frontend for health checking and connection status
+ * - Overall health status (healthy/degraded/critical)
+ * - Individual service status (Vapi/OpenAI, ElevenLabs)
+ * - Detailed error messages for failed connections
+ * - Service configuration info (models, voices, etc.)
+ * - Timestamp for monitoring
  */
-router.get('/', (req, res) => {
-  res.json({
-    name: 'NovaVA API', // Application identifier
-    version: '1.0.0', // API version for compatibility tracking
-    description: 'Nova Virtual Assistant - AI-powered conversational interface',
-    author: 'Abdur Rehman',
-    endpoints: {
-      // ENDPOINT DOCUMENTATION: Self-documenting API structure
-      conversation: {
-        text: 'POST /api/conversation/text - Generate text response', // Main chat endpoint
-        history: 'GET /api/conversation/history/:sessionId - Get conversation history', // Session retrieval
-        tts: 'POST /api/conversation/tts - Generate TTS configuration for text-to-speech' // Voice synthesis
+router.get('/', asyncHandler(async (req, res) => {
+  try {
+    console.log('🔍 Starting comprehensive health check...');
+    
+    // DYNAMIC HEALTH CHECK: Test all external services
+    const healthStatus = await vapiService.checkServicesHealth();
+    
+    // BASE API INFORMATION
+    const apiInfo = {
+      name: 'NovaVA API',
+      version: '1.0.0',
+      description: 'Nova Virtual Assistant - AI-powered conversational interface',
+      author: 'Abdur Rehman',
+      endpoints: {
+        health: 'GET /api - Service health check with external API connectivity',
+        conversation: {
+          text: 'POST /api/conversation/text - Generate text response via Vapi/OpenAI',
+          history: 'GET /api/conversation/history/:sessionId - Get conversation history',
+          tts: 'POST /api/conversation/tts - Generate TTS audio via ElevenLabs'
+        }
       }
-    },
-    timestamp: new Date().toISOString() // Server time for connectivity verification
-  });
-});
+    };
+    
+    // DETERMINE HTTP STATUS CODE BASED ON HEALTH
+    let statusCode = 200; // Default: healthy
+    if (healthStatus.overall === 'degraded') {
+      statusCode = 206; // Partial Content: some services down
+    } else if (healthStatus.overall === 'critical') {
+      statusCode = 503; // Service Unavailable: critical services down
+    }
+    
+    // COMPREHENSIVE RESPONSE WITH HEALTH DATA
+    res.status(statusCode).json({
+      ...apiInfo,
+      health: {
+        status: healthStatus.overall,
+        services: healthStatus.services,
+        errors: healthStatus.errors,
+        lastChecked: healthStatus.timestamp
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`✅ Health check completed - Status: ${healthStatus.overall}`);
+    
+  } catch (error) {
+    console.error('❌ Health check failed:', error.message);
+    
+    // FALLBACK RESPONSE FOR HEALTH CHECK FAILURES
+    res.status(503).json({
+      name: 'NovaVA API',
+      version: '1.0.0',
+      health: {
+        status: 'critical',
+        error: 'Health check system failure',
+        message: error.message,
+        lastChecked: new Date().toISOString()
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+}));
 
 
 
@@ -187,25 +240,19 @@ router.get('/conversation/history/:sessionId', asyncHandler(async (req, res) => 
  * Generate TTS Configuration
  * 
  * ENDPOINT: POST /api/conversation/tts
- * PURPOSE: Generate Text-to-Speech configuration for voice synthesis
+ * PURPOSE: Generate Text-to-Speech audio using ElevenLabs
  * 
  * REQUEST FLOW:
  * 1. Frontend sends text content + optional voice options
  * 2. Validates text input (required, length, type checking)
- * 3. Calls vapiService.getTTSConfig() for voice configuration
- * 4. Returns enhanced TTS settings for browser voice synthesis
+ * 3. Calls vapiService.getTTSConfig() for ElevenLabs TTS generation
+ * 4. Returns audio URL from ElevenLabs for direct playback
  * 
- * CURRENT TTS IMPLEMENTATION:
- * - Returns enhanced browser TTS configuration
- * - Optimized voice settings for natural speech delivery
- * - Preferred voice list for cross-platform compatibility
- * - SSML support for improved prosody and pauses
- * 
- * FUTURE TTS INTEGRATION:
- * - Will integrate with Vapi's TTS infrastructure
- * - Support for premium voice models (ElevenLabs, etc.)
- * - Direct audio URL generation for immediate playback
- * - Advanced voice customization and speaker selection
+ * TTS IMPLEMENTATION:
+ * - Uses ElevenLabs exclusively for high-quality TTS
+ * - Returns base64 audio data URL for immediate playback
+ * - No fallback to browser TTS - ensures consistent quality
+ * - Rachel voice (21m00Tcm4TlvDq8ikWAM) with optimized settings
  * 
  * VALIDATION RULES:
  * - Text: Required, non-empty string, max 2000 characters
@@ -237,24 +284,46 @@ router.post('/conversation/tts', asyncHandler(async (req, res) => {
   }
   
   // REQUEST LOGGING: Track TTS requests for monitoring and debugging
-  console.log('🎤 TTS Request:', { text: text.substring(0, 50) + '...', options });
+  console.log('🎤 ElevenLabs TTS Request:', { text: text.substring(0, 50) + '...', options });
   
-  // SERVICE CALL: Generate TTS configuration through Vapi service
-  // Currently returns enhanced browser TTS config, future: premium voice URLs
-  const result = await vapiService.getTTSConfig(text, options || {});
-  
-  // RESPONSE LOGGING: Track TTS generation success and method used
-  console.log('🎵 TTS Success:', { 
-    hasAudioUrl: !!result.data.audioUrl, // Whether direct audio URL is provided
-    method: result.data.method // TTS method used (browser/api/etc.)
-  });
-  
-  // RESPONSE FORMATTING: Return TTS configuration for frontend audio playback
-  res.json({
-    success: true,
-    data: result.data, // TTS configuration and voice settings
-    message: result.message // Status message from service layer
-  });
+  try {
+    // SERVICE CALL: Generate TTS audio using ElevenLabs
+    const result = await vapiService.getTTSConfig(text);
+    
+    // RESPONSE LOGGING: Track TTS generation success
+    console.log('🎵 ElevenLabs TTS Success:', { 
+      provider: result.provider,
+      audioSize: result.audioSize,
+      hasAudioUrl: !!result.audioUrl
+    });
+    
+    // RESPONSE FORMATTING: Return ElevenLabs audio URL with standard API wrapper
+    res.json({
+      success: true,
+      data: {
+        text: text,
+        audioUrl: result.audioUrl,
+        voiceProvider: 'elevenlabs',
+        voiceId: '21m00Tcm4TlvDq8ikWAM',
+        model: 'eleven_flash_v2_5',
+        audioSize: result.audioSize,
+        timestamp: new Date().toISOString()
+      },
+      message: 'TTS audio generated successfully using ElevenLabs'
+    });
+    
+  } catch (error) {
+    // ERROR HANDLING: Return structured error for TTS failures
+    console.error('🔴 ElevenLabs TTS Error:', error.message);
+    
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: `TTS generation failed: ${error.message}`,
+        statusCode: 500
+      }
+    });
+  }
 }));
 
 

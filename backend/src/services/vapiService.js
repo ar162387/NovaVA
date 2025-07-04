@@ -8,7 +8,7 @@
  * TECHNICAL OVERVIEW:
  * - Uses Vapi Chat API for text generation with GPT-4o model
  * - Manages conversation sessions and continuity across multiple exchanges
- * - Provides enhanced TTS configuration for realistic voice synthesis
+ * - Provides Vapi TTS with ElevenLabs for realistic voice synthesis
  * - Implements session-based chat history for context preservation
  */
 
@@ -32,10 +32,8 @@ const vapiClient = axios.create({
   timeout: 30000 // 30 seconds timeout
 });
 
-
-
 /**
- * Default assistant configuration for NovaVA
+ * Default assistant configuration for NovaVA with Vapi TTS
  * 
  * TECHNICAL DETAILS:
  * - Uses OpenAI GPT-4o model for high-quality text generation
@@ -43,6 +41,7 @@ const vapiClient = axios.create({
  * - Max 200 tokens to keep responses concise for voice playback
  * - System prompt includes current date/time for context awareness
  * - Configured for natural, conversational responses without markdown
+ * - Includes ElevenLabs voice configuration for realistic TTS
  */
 // Add today's date to the system prompt for model context
 const today = new Date().toLocaleDateString('en-US', {
@@ -60,9 +59,25 @@ const defaultAssistantConfig = {
     messages: [
       {
         role: 'system',
-        content: `You are NovaVA, a smart virtual assistant designed for natural, human-like conversation. Today is ${today}, and the current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}. You speak clearly and conversationally, just like a real person would. Always respond in a warm, friendly tone without using any markdown formatting, abbreviations, or technical jargon. Keep your responses concise, to the point, and easy to understand. You help with quick questions and engage in natural dialogue as if you were speaking face-to-face with someone. Never use bullet points, asterisks, or any special formatting - just speak naturally like a human would in a conversation.`
+        content: `You are NovaVA, a smart virtual assistant designed for natural, human-like conversation. 
+        Today is ${today}, and the current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}. 
+        You speak clearly and conversationally, just like a real person would. Always respond in a warm, friendly tone without using any markdown
+         formatting, abbreviations, or technical jargon. Keep your responses concise, to the point, and easy to understand.
+          You help with quick questions and engage in natural dialogue as if you were speaking face-to-face with someone. Never use bullet points, 
+          asterisks, or any special formatting - just speak naturally like a human would in a conversation.`
       }
     ]
+  },
+
+  // VAPI TTS CONFIGURATION: ElevenLabs integration for realistic voices
+  voice: {
+    provider: '11labs', // Use ElevenLabs for high-quality TTS (correct provider name)
+    voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel voice (natural, professional female voice)
+    model: 'eleven_flash_v2_5', // Fast, high-quality model with low latency
+    stability: 0.5, // Voice stability (0-1, higher = more consistent)
+    similarityBoost: 0.8, // Voice similarity enhancement (0-1)
+    style: 0.0, // Voice style adjustment (0-1, 0 = neutral)
+    useSpeakerBoost: true // Speaker boost for clarity
   },
 
   firstMessage: "Hello there! I'm NovaVA, your virtual assistant. I'm here to chat and help you with whatever you need. What's on your mind today?",
@@ -92,11 +107,6 @@ const chatSessions = new Map();
  * 4. Error handling and fallback responses
  */
 class VapiService {
-
-
-
-
-
 
   /**
    * Generate text response using Vapi Chat API with session continuity
@@ -193,8 +203,6 @@ class VapiService {
       };
       chatSessions.set(currentSessionId, updatedSessionData);
 
-
-
       // RESPONSE FORMATTING: Return structured data for frontend consumption
       return {
         success: true,
@@ -219,83 +227,107 @@ class VapiService {
     }
   }
 
-
-
   /**
-   * Get enhanced TTS configuration for high-quality browser voices
-   * 
-   * TTS STRATEGY:
-   * - Currently returns enhanced browser TTS configuration as primary method
-   * - Provides realistic voice settings for immediate playback
-   * - Future integration point for Vapi's TTS infrastructure
-   * - Includes SSML support and natural speech enhancements
-   * 
-   * TECHNICAL IMPLEMENTATION:
-   * - Enhanced browser voices with specific voice preferences
-   * - Optimized speech rate (0.85) for natural delivery
-   * - SSML support for improved prosody and pauses
-   * - Fallback voice list for cross-platform compatibility
-   * 
-   * @param {string} text - Text content to convert to speech
-   * @param {object} options - Voice configuration options
-   * @returns {Promise<object>} TTS configuration for audio playback
+   * Generate TTS audio using ElevenLabs only (no fallback)
+   * @param {string} text - The text to convert to speech
+   * @returns {Promise<Object>} TTS configuration with audio URL
    */
-  async getTTSConfig(text, options = {}) {
+  async getTTSConfig(text) {
+    console.log('🎵 Generating ElevenLabs TTS for text:', text.substring(0, 100) + '...');
+    
     try {
-      // INPUT VALIDATION: Ensure text is provided and valid
-      if (!text || typeof text !== 'string' || text.trim().length === 0) {
-        throw new Error('Text is required for TTS generation');
+      // Use ElevenLabs TTS exclusively
+      const elevenLabsResult = await this.generateElevenLabsTTS(text);
+      if (elevenLabsResult.success) {
+        console.log('✅ ElevenLabs TTS generated successfully');
+        return {
+          type: 'audio_url',
+          audioUrl: elevenLabsResult.audioUrl,
+          provider: 'elevenlabs',
+          audioSize: elevenLabsResult.audioSize
+        };
       }
-
-      console.log('🎵 Generating enhanced TTS configuration for realistic browser playback');
-
-      // TTS CONFIGURATION: Return enhanced browser TTS setup for immediate playback
-      return {
-        success: true,
-        data: {
-          text: text.trim(), // Clean text for TTS processing
-          audioUrl: null, // Will use enhanced browser TTS for immediate playback
-          timestamp: new Date().toISOString(),
-          voiceProvider: 'enhanced-browser', // Primary TTS method
-          voiceId: options.voiceId || 'enhanced-natural',
-          method: 'enhanced-browser-tts',
-          voiceSettings: {
-            rate: 0.95, // Slightly slower for more natural speech
-            pitch: 1.0, // Normal pitch
-            volume: 1.0, // Full volume
-            lang: 'en-US', // English US locale
-            voiceName: options.voiceName || 'Google US English', // Prefer specific voices
-            quality: 'high' // Request highest quality synthesis
-          },
-          enhancedSettings: {
-            // VOICE PREFERENCES: Ordered list of high-quality browser voices
-            preferredVoices: [
-              'Google US English',
-              'Microsoft Zira - English (United States)', 
-              'Microsoft David - English (United States)',
-              'Alex', // macOS voice
-              'Samantha', // macOS voice
-              'Karen', // macOS voice
-              'Daniel', // macOS voice
-              'Moira', // macOS voice
-              'Fiona' // macOS voice
-            ],
-            useSSML: true, // Use SSML for better speech quality when available
-            pauseAfterSentences: true, // Natural pauses between sentences
-            naturalPauses: true, // Enhanced pause detection
-            improvedProsody: true // Better intonation and rhythm
-          }
-        },
-        message: 'Enhanced TTS configuration generated for realistic browser playback'
-      };
-
+      
+      // If ElevenLabs fails, throw an error instead of falling back
+      console.error('❌ ElevenLabs TTS failed:', elevenLabsResult.error);
+      throw new Error(`ElevenLabs TTS failed: ${elevenLabsResult.error}`);
     } catch (error) {
-      console.error('❌ TTS Config Error:', error.message);
-      throw new Error(`Failed to generate TTS config: ${error.message}`);
+      console.error('❌ ElevenLabs TTS error:', error.message);
+      throw new Error(`TTS generation failed: ${error.message}`);
     }
   }
 
+  /**
+   * Generate TTS using ElevenLabs API directly
+   * @param {string} text - The text to convert to speech
+   * @returns {Promise<Object>} Result with success status and audio URL or error
+   */
+  async generateElevenLabsTTS(text) {
+    const { elevenlabs } = config;
+    
+    // Check if ElevenLabs is configured
+    if (!elevenlabs.apiKey) {
+      console.warn('⚠️ ElevenLabs API key not configured');
+      return { success: false, error: 'ElevenLabs API key not configured' };
+    }
 
+    try {
+      console.log('🎤 Making ElevenLabs TTS request...');
+      
+      const response = await axios.post(
+        `${elevenlabs.baseUrl}/text-to-speech/${elevenlabs.defaultVoice.voiceId}`,
+        {
+          text: text,
+          model_id: elevenlabs.defaultVoice.model,
+          voice_settings: elevenlabs.defaultVoice.settings
+        },
+        {
+          headers: {
+            'Accept': 'audio/mpeg',
+            'Content-Type': 'application/json',
+            'xi-api-key': elevenlabs.apiKey
+          },
+          responseType: 'arraybuffer', // Important for audio data
+          timeout: 30000 // 30 second timeout
+        }
+      );
+
+      if (response.status === 200 && response.data) {
+        // Convert ArrayBuffer to Base64 data URL
+        const audioBuffer = Buffer.from(response.data);
+        const base64Audio = audioBuffer.toString('base64');
+        const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+        
+        console.log('✅ ElevenLabs TTS audio generated successfully');
+        console.log(`📊 Audio size: ${(audioBuffer.length / 1024).toFixed(2)} KB`);
+        
+        return {
+          success: true,
+          audioUrl: audioUrl,
+          audioSize: audioBuffer.length,
+          provider: 'elevenlabs'
+        };
+      } else {
+        console.error('❌ ElevenLabs API returned unsuccessful response:', response.status);
+        return { success: false, error: `ElevenLabs API error: ${response.status}` };
+      }
+    } catch (error) {
+      console.error('❌ ElevenLabs TTS generation failed:', error.message);
+      
+      if (error.response) {
+        console.error('📋 ElevenLabs API response:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data?.toString?.() || 'No response data'
+        });
+      }
+      
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || error.message 
+      };
+    }
+  }
 
   /**
    * Get chat history for a session
@@ -375,9 +407,138 @@ class VapiService {
     return null;
   }
 
+  /**
+   * Check health of all external API services
+   * 
+   * HEALTH CHECK SYSTEM:
+   * - Tests actual connectivity to Vapi API (OpenAI/GPT-4o)
+   * - Tests actual connectivity to ElevenLabs TTS API
+   * - Returns detailed status for each service
+   * - Used by frontend to display real connection status
+   * 
+   * @returns {Promise<object>} Comprehensive health status of all services
+   */
+  async checkServicesHealth() {
+    const healthStatus = {
+      overall: 'healthy',
+      services: {},
+      timestamp: new Date().toISOString(),
+      errors: []
+    };
 
+    // TEST VAPI/OPENAI CONNECTION
+    try {
+      console.log('🔍 Testing Vapi API connectivity...');
+      
+      // Test Vapi API connectivity with a minimal valid chat request
+      const testResponse = await vapiClient.post('/chat', {
+        input: 'test',
+        assistant: {
+          model: {
+            provider: 'openai',
+            model: 'gpt-4o',
+            temperature: 0.1,
+            maxTokens: 50, // Must be at least 50
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a test assistant. Respond with just "ok".'
+              }
+            ]
+          },
+          voice: {
+            provider: '11labs',
+            voiceId: '21m00Tcm4TlvDq8ikWAM'
+          }
+        }
+      });
 
+      healthStatus.services.vapi = {
+        status: 'connected',
+        provider: 'openai',
+        model: 'gpt-4o',
+        responseTime: 'normal',
+        lastChecked: new Date().toISOString()
+      };
+      
+      console.log('✅ Vapi API connection successful');
+    } catch (error) {
+      console.error('❌ Vapi API connection failed:', error.message);
+      
+      healthStatus.services.vapi = {
+        status: 'disconnected',
+        error: error.response?.data?.message || error.message,
+        lastChecked: new Date().toISOString()
+      };
+      
+      healthStatus.overall = 'degraded';
+      healthStatus.errors.push(`Vapi/OpenAI: ${error.message}`);
+    }
 
+    // TEST ELEVENLABS CONNECTION
+    try {
+      console.log('🔍 Testing ElevenLabs API connectivity...');
+      
+      if (!config.elevenlabs.apiKey) {
+        throw new Error('ElevenLabs API key not configured');
+      }
+
+      // Test ElevenLabs connectivity with a minimal TTS request (just test the API key is valid)
+      const testTTSResponse = await axios.post(
+        `${config.elevenlabs.baseUrl}/text-to-speech/${config.elevenlabs.defaultVoice.voiceId}`,
+        {
+          text: "hi",  // Very short text to minimize cost
+          model_id: config.elevenlabs.defaultVoice.model,
+          voice_settings: config.elevenlabs.defaultVoice.settings
+        },
+        {
+          headers: {
+            'Accept': 'audio/mpeg',
+            'Content-Type': 'application/json',
+            'xi-api-key': config.elevenlabs.apiKey
+          },
+          responseType: 'arraybuffer',
+          timeout: 10000
+        }
+      );
+
+      healthStatus.services.elevenlabs = {
+        status: 'connected',
+        voiceId: config.elevenlabs.defaultVoice.voiceId,
+        model: config.elevenlabs.defaultVoice.model,
+        testAudioGenerated: testTTSResponse.data ? true : false,
+        audioSizeKB: testTTSResponse.data ? Math.round(Buffer.from(testTTSResponse.data).length / 1024) : 0,
+        lastChecked: new Date().toISOString()
+      };
+      
+      console.log('✅ ElevenLabs API connection successful');
+    } catch (error) {
+      console.error('❌ ElevenLabs API connection failed:', error.message);
+      
+      healthStatus.services.elevenlabs = {
+        status: 'disconnected',
+        error: error.response?.data?.detail || error.message,
+        lastChecked: new Date().toISOString()
+      };
+      
+      healthStatus.overall = healthStatus.overall === 'healthy' ? 'degraded' : 'critical';
+      healthStatus.errors.push(`ElevenLabs: ${error.message}`);
+    }
+
+    // DETERMINE OVERALL STATUS
+    const connectedServices = Object.values(healthStatus.services).filter(s => s.status === 'connected').length;
+    const totalServices = Object.keys(healthStatus.services).length;
+    
+    if (connectedServices === 0) {
+      healthStatus.overall = 'critical';
+    } else if (connectedServices < totalServices) {
+      healthStatus.overall = 'degraded';
+    } else {
+      healthStatus.overall = 'healthy';
+    }
+
+    return healthStatus;
+  }
 }
 
 // EXPORT: Singleton instance for consistent service usage across the application

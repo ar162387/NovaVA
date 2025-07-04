@@ -293,8 +293,8 @@ export function getEnvVar(key: string, fallback: string = ''): string {
 }
 
 /**
- * Audio Player Manager for Vapi TTS
- * Handles realistic speech playback using Vapi + ElevenLabs
+ * Audio Player Manager for ElevenLabs TTS
+ * Handles realistic speech playback using ElevenLabs
  */
 export class AudioPlayerManager {
   private static instance: AudioPlayerManager | null = null
@@ -303,7 +303,7 @@ export class AudioPlayerManager {
   private isIntentionallyStopped: boolean = false
 
   private constructor() {
-    // Singleton pattern to ensure only one audio instance
+    // Private constructor for singleton pattern
   }
 
   public static getInstance(): AudioPlayerManager {
@@ -324,48 +324,33 @@ export class AudioPlayerManager {
    * Stop current audio playback
    */
   public stop(): void {
-    this.isIntentionallyStopped = true
-
-    // Stop HTML audio if playing
     if (this.currentAudio) {
+      console.log('🛑 Stopping current audio playback')
+      this.isIntentionallyStopped = true
       this.currentAudio.pause()
       this.currentAudio.currentTime = 0
       this.currentAudio = null
     }
-
-    // Stop speech synthesis if active
-    if ('speechSynthesis' in window && speechSynthesis.speaking) {
-      speechSynthesis.cancel()
-    }
-
-    // Notify that playback has ended
-    if (this.onPlaybackEnd) {
-      this.onPlaybackEnd()
-    }
+    // Reset the flag after a brief delay
+    setTimeout(() => {
+      this.isIntentionallyStopped = false
+    }, 100)
   }
 
   /**
-   * Play audio from URL (Vapi TTS audio) or fallback to enhanced browser TTS
+   * Play audio from ElevenLabs URL
+   * @param audioUrl - The audio URL from ElevenLabs
    */
-  public async playAudioUrl(audioUrl: string | null, ttsConfig?: any): Promise<void> {
-    // Reset the intentionally stopped flag when starting new playback
-    this.isIntentionallyStopped = false
+  public async playAudioUrl(audioUrl: string): Promise<void> {
+    if (!audioUrl) {
+      throw new Error('No audio URL provided')
+    }
 
-    // If we have an audio URL, play it directly
-    if (audioUrl) {
-      return this.playDirectAudio(audioUrl)
-    }
-    
-    // Fallback to enhanced browser TTS if no audio URL
-    if (ttsConfig && ttsConfig.text) {
-      return this.playEnhancedBrowserTTS(ttsConfig.text, ttsConfig.voiceSettings, ttsConfig.enhancedSettings)
-    }
-    
-    throw new Error('No audio URL or TTS configuration provided')
+    return this.playDirectAudio(audioUrl)
   }
 
   /**
-   * Play audio directly from URL
+   * Play audio directly from URL (ElevenLabs)
    */
   private async playDirectAudio(audioUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -381,19 +366,19 @@ export class AudioPlayerManager {
 
         // Set up event handlers
         audio.onloadstart = () => {
-          console.log('🎵 Loading Vapi TTS audio...')
+          console.log('🎵 Loading ElevenLabs TTS audio...')
         }
 
         audio.oncanplay = () => {
-          console.log('🎵 Vapi TTS audio ready to play')
+          console.log('🎵 ElevenLabs TTS audio ready to play')
         }
 
         audio.onplay = () => {
-          console.log('🎵 Vapi TTS playback started')
+          console.log('🎵 ElevenLabs TTS playback started')
         }
 
         audio.onended = () => {
-          console.log('🎵 Vapi TTS playback ended')
+          console.log('🎵 ElevenLabs TTS playback ended')
           this.currentAudio = null
           if (this.onPlaybackEnd && !this.isIntentionallyStopped) {
             this.onPlaybackEnd()
@@ -402,12 +387,12 @@ export class AudioPlayerManager {
         }
 
         audio.onerror = (event) => {
-          console.error('🔴 Vapi TTS playback error:', event)
+          console.error('🔴 ElevenLabs TTS playback error:', event)
           this.currentAudio = null
           if (this.onPlaybackEnd && !this.isIntentionallyStopped) {
             this.onPlaybackEnd()
           }
-          reject(new Error('Failed to play TTS audio'))
+          reject(new Error('Failed to play ElevenLabs TTS audio'))
         }
 
         // Store current audio
@@ -424,119 +409,10 @@ export class AudioPlayerManager {
       }
     })
   }
-
-  /**
-   * Enhanced browser TTS with natural-sounding voices
-   */
-  private async playEnhancedBrowserTTS(text: string, voiceSettings: any = {}, enhancedSettings: any = {}): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!('speechSynthesis' in window)) {
-        reject(new Error('Speech synthesis not supported in this browser'))
-        return
-      }
-
-      // Stop any current speech
-      this.stop()
-
-      try {
-        // Wait for voices to load
-        const loadVoices = () => {
-          const voices = speechSynthesis.getVoices()
-          
-          if (voices.length === 0) {
-            // Voices not loaded yet, wait and retry
-            setTimeout(loadVoices, 100)
-            return
-          }
-
-          console.log('🎵 Available voices:', voices.map(v => v.name))
-
-          // Create enhanced utterance
-          const utterance = new SpeechSynthesisUtterance(text)
-          
-          // Apply voice settings
-          utterance.rate = voiceSettings.rate || 0.85
-          utterance.pitch = voiceSettings.pitch || 1.0
-          utterance.volume = voiceSettings.volume || 1.0
-          utterance.lang = voiceSettings.lang || 'en-US'
-
-          // Try to find and use a high-quality voice
-          if (enhancedSettings.preferredVoices) {
-            for (const preferredVoice of enhancedSettings.preferredVoices) {
-              const voice = voices.find(v => 
-                v.name.includes(preferredVoice) || 
-                v.name.toLowerCase().includes(preferredVoice.toLowerCase())
-              )
-              if (voice) {
-                utterance.voice = voice
-                console.log('🎵 Selected voice:', voice.name)
-                break
-              }
-            }
-          }
-
-          // If no preferred voice found, use the best available English voice
-          if (!utterance.voice) {
-            const englishVoices = voices.filter(v => v.lang.startsWith('en'))
-            if (englishVoices.length > 0) {
-              // Prefer Google or Microsoft voices
-              const qualityVoice = englishVoices.find(v => 
-                v.name.includes('Google') || 
-                v.name.includes('Microsoft') ||
-                v.name.includes('Enhanced')
-              ) || englishVoices[0]
-              
-              utterance.voice = qualityVoice
-              console.log('🎵 Using fallback voice:', qualityVoice.name)
-            }
-          }
-
-          // Set up event handlers
-          utterance.onstart = () => {
-            console.log('🎵 Enhanced browser TTS started')
-          }
-
-          utterance.onend = () => {
-            console.log('🎵 Enhanced browser TTS completed')
-            if (this.onPlaybackEnd && !this.isIntentionallyStopped) {
-              this.onPlaybackEnd()
-            }
-            resolve()
-          }
-
-          utterance.onerror = (event) => {
-            console.error('🔴 Enhanced TTS error:', event.error)
-            
-            // If this was intentionally stopped, don't treat it as an error
-            if (this.isIntentionallyStopped && event.error === 'interrupted') {
-              console.log('🛑 TTS was intentionally stopped')
-              resolve()
-              return
-            }
-            
-            if (this.onPlaybackEnd && !this.isIntentionallyStopped) {
-              this.onPlaybackEnd()
-            }
-            reject(new Error(`Speech synthesis error: ${event.error}`))
-          }
-
-          // Start speaking
-          speechSynthesis.speak(utterance)
-        }
-
-        // Load voices
-        loadVoices()
-
-      } catch (error) {
-        console.error('🔴 Enhanced TTS setup error:', error)
-        reject(error)
-      }
-    })
-  }
 }
 
 /**
- * Get Audio Player Manager instance for Vapi TTS
+ * Get Audio Player Manager instance for ElevenLabs TTS
  */
 export const getTTSManager = (): AudioPlayerManager => {
   return AudioPlayerManager.getInstance()

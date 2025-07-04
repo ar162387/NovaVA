@@ -27,6 +27,23 @@ export const config = {
     }
   },
 
+  // ElevenLabs API Configuration (Direct TTS)
+  elevenlabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY || 'sk_3283280eaa3e37cf221928865548a0a2b18fe6da351eb86e',
+    baseUrl: 'https://api.elevenlabs.io/v1',
+    // Default voice settings
+    defaultVoice: {
+      voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel voice
+      model: 'eleven_flash_v2_5', // Fast, high-quality model
+      settings: {
+        stability: 0.5,
+        similarity_boost: 0.8,
+        style: 0.0,
+        use_speaker_boost: true
+      }
+    }
+  },
+
   // CORS Configuration
   cors: {
     origin: [

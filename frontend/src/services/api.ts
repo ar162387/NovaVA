@@ -33,7 +33,7 @@ import type {
 
 // AXIOS CONFIGURATION: Configure axios instance for backend communication
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://novavabackend.onrender.com/api', // Use environment variable or Render backend URL
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001/api', // Use local development server for testing
   timeout: 30000, // 30 seconds timeout to match backend Vapi API timeouts
   headers: {
     'Content-Type': 'application/json', // JSON content type for all requests
@@ -105,21 +105,72 @@ export const apiService = {
   // HEALTH & STATUS ENDPOINTS
   
   /**
-   * Get server health status
+   * Get comprehensive service health status
    * 
    * ENDPOINT: GET /api/
-   * PURPOSE: Check backend server connectivity and status
-   * RETURNS: Server info with version, timestamp, and service status
+   * PURPOSE: Dynamic health check with real external API connectivity testing
+   * RETURNS: Detailed status of all services (Vapi/OpenAI, ElevenLabs)
+   * 
+   * HEALTH STATUS LEVELS:
+   * - healthy: All services connected and working
+   * - degraded: Some services unavailable but core functionality works
+   * - critical: Critical services down, application may not function
+   * 
+   * SERVICE DETAILS:
+   * - Vapi/OpenAI: Text generation and conversation AI
+   * - ElevenLabs: Text-to-speech audio generation
+   * - Individual service status and error messages
    */
   async getHealth(): Promise<any> {
-    // Use the root API endpoint instead of the health endpoint
-    const response = await api.get('/')
-    return {
-      status: 'healthy',
-      timestamp: response.data.timestamp,
-      version: response.data.version || '1.0.0',
-      services: {
-        vapi: 'connected' // Indicates Vapi API connectivity
+    try {
+      const response = await api.get('/')
+      
+      // NEW HEALTH CHECK RESPONSE: Extract service-specific health data
+      if (response.data.health) {
+        return {
+          status: response.data.health.status, // overall: healthy/degraded/critical
+          timestamp: response.data.timestamp,
+          version: response.data.version || '1.0.0',
+          services: response.data.health.services, // individual service statuses
+          errors: response.data.health.errors || [], // specific error messages
+          lastChecked: response.data.health.lastChecked,
+          // Enhanced status information
+          connectionDetails: {
+            vapi: response.data.health.services?.vapi?.status === 'connected',
+            elevenlabs: response.data.health.services?.elevenlabs?.status === 'connected',
+            vapiError: response.data.health.services?.vapi?.error,
+            elevenlabsError: response.data.health.services?.elevenlabs?.error
+          }
+        }
+      }
+      
+      // FALLBACK: Legacy response format compatibility
+      return {
+        status: 'healthy',
+        timestamp: response.data.timestamp,
+        version: response.data.version || '1.0.0',
+        services: {
+          vapi: 'connected',
+          elevenlabs: 'unknown'
+        },
+        connectionDetails: {
+          vapi: true,
+          elevenlabs: false
+        }
+      }
+    } catch (error: any) {
+      // NETWORK ERROR HANDLING: Return error details for frontend display
+      return {
+        status: 'critical',
+        timestamp: new Date().toISOString(),
+        version: 'unknown',
+        services: {},
+        errors: [error.message || 'Network connection failed'],
+        connectionDetails: {
+          vapi: false,
+          elevenlabs: false,
+          networkError: true
+        }
       }
     }
   },

@@ -73,27 +73,19 @@ const ChatMessage: React.FC<MessageProps> = ({ message }) => {
   }
 
   /**
-   * Handle TTS playback for assistant messages using Vapi + Enhanced Browser TTS
+   * Handle TTS playback for assistant messages using ElevenLabs
    * 
    * TTS API FLOW:
    * 1. Validates message type (only assistant messages have TTS)
    * 2. Toggles playback if already playing (stop functionality)
-   * 3. Calls backend API (/api/conversation/tts) for TTS configuration
-   * 4. Backend calls vapiService.getTTSConfig() for enhanced settings
-   * 5. Receives optimized browser TTS configuration with voice preferences
-   * 6. Plays audio through TTS manager with enhanced voice settings
-   * 7. Manages state transitions and error handling
+   * 3. Calls backend API (/api/conversation/tts) for ElevenLabs TTS
+   * 4. Backend returns audio URL from ElevenLabs
+   * 5. Plays audio directly through TTS manager
+   * 6. Manages state transitions and error handling
    * 
    * ENDPOINT CALLED: POST /api/conversation/tts
    * BACKEND SERVICE: vapiService.getTTSConfig()
-   * TTS METHOD: Enhanced browser TTS with optimized voice settings
-   * 
-   * CURRENT TTS IMPLEMENTATION:
-   * - Uses enhanced browser TTS with optimized settings
-   * - Prefers high-quality voices (Google US English, Microsoft voices)
-   * - Slower speech rate (0.85) for natural delivery
-   * - SSML support for better prosody when available
-   * - Future: Will integrate with Vapi's TTS infrastructure for premium voices
+   * TTS METHOD: ElevenLabs audio URL playback only
    */
   const handlePlayTTS = async () => {
     // MESSAGE TYPE VALIDATION: Only assistant messages support TTS
@@ -102,48 +94,46 @@ const ChatMessage: React.FC<MessageProps> = ({ message }) => {
     try {
       if (isPlayingTTS) {
         // STOP CURRENT AUDIO: Toggle functionality for active playback
-        console.log('🛑 Stopping TTS playback for message:', message.id)
+        console.log('🛑 Stopping ElevenLabs TTS playback for message:', message.id)
         ttsManager.stop()
         setIsPlayingTTS(false)
         return
       }
 
-      console.log('▶️ Starting TTS playback for message:', message.id)
+      console.log('▶️ Starting ElevenLabs TTS playback for message:', message.id)
       setIsLoadingTTS(true)
       
-      console.log('🎤 Requesting Vapi TTS for:', message.content.substring(0, 50) + '...')
+      console.log('🎤 Requesting ElevenLabs TTS for:', message.content.substring(0, 50) + '...')
 
-      // API CALL: Get TTS configuration from backend
-      // This calls: Frontend -> Backend API -> vapiService.getTTSConfig()
-      // Currently returns enhanced browser TTS config, future: audio URLs from Vapi
+      // API CALL: Get ElevenLabs TTS audio URL from backend
       const ttsData = await apiService.getTTSConfig(message.content, {
-        voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel voice (natural, professional)
-        stability: 0.5, // Voice stability setting
-        similarityBoost: 0.8, // Voice similarity enhancement
-        style: 0.0, // Voice style adjustment
-        useSpeakerBoost: true // Speaker boost for clarity
+        voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel voice
+        stability: 0.5,
+        similarityBoost: 0.8,
+        style: 0.0,
+        useSpeakerBoost: true
       })
 
-      console.log('🎵 Vapi TTS response received:', {
-        hasAudioUrl: !!ttsData.audioUrl,
-        method: ttsData.method,
-        voiceProvider: ttsData.voiceProvider
-      })
+      console.log('🎵 ElevenLabs TTS response received:', ttsData)
+
+      // Validate that we received an audio URL
+      if (!ttsData.audioUrl) {
+        throw new Error('No audio URL received from ElevenLabs TTS')
+      }
 
       // STATE TRANSITION: Move from loading to playing
       setIsLoadingTTS(false)
       console.log('🎮 Setting isPlayingTTS to true for message:', message.id)
       setIsPlayingTTS(true)
 
-      // AUDIO PLAYBACK: Play using enhanced audio player
-      // Supports both direct audio URLs and enhanced browser TTS
-      await ttsManager.playAudioUrl(ttsData.audioUrl, ttsData)
+      // AUDIO PLAYBACK: Play ElevenLabs audio URL directly
+      await ttsManager.playAudioUrl(ttsData.audioUrl)
 
-      console.log('🎵 Vapi TTS playback completed successfully for message:', message.id)
+      console.log('🎵 ElevenLabs TTS playback completed successfully for message:', message.id)
       // State will be updated by the onPlaybackEnd callback
 
     } catch (error) {
-      console.error('🔴 Vapi TTS Error for message:', message.id, error)
+      console.error('🔴 ElevenLabs TTS Error for message:', message.id, error)
       
       // ERROR STATE CLEANUP
       setIsLoadingTTS(false)

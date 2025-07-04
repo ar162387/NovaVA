@@ -27,6 +27,7 @@ interface ChatInterfaceProps {
   onCreateSession: () => ConversationSession
   onUpdateSession: (updates: Partial<ConversationSession>) => void
   isConnected: boolean
+  onApiError?: (error: any) => void
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -34,6 +35,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onCreateSession,
   onUpdateSession,
   isConnected,
+  onApiError,
 }) => {
   // STATE MANAGEMENT
   const [inputMessage, setInputMessage] = useState('') // User's current input text
@@ -155,6 +157,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       onUpdateSession({
         messages: [...session.messages, userMessage, errorMessage],
       })
+
+      if (onApiError) {
+        onApiError(error)
+      }
     } finally {
       // CLEANUP: Always clear loading state
       setIsLoading(false)

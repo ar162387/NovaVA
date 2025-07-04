@@ -82,6 +82,7 @@ export interface ConversationSession {
  * - Manages current active session
  * - Stores all user sessions for navigation
  * - Handles global loading and error states
+ * - Includes detailed service health information
  */
 export interface AppState {
   isConnected: boolean // Backend connectivity status
@@ -89,6 +90,18 @@ export interface AppState {
   currentSession: ConversationSession | null // Active conversation session
   sessions: ConversationSession[] // All user sessions
   error: string | null // Global error message
+  healthStatus?: {
+    status: 'healthy' | 'degraded' | 'critical' // Overall system health
+    services: any // Individual service statuses
+    errors: string[] // Specific error messages
+    connectionDetails: {
+      vapi: boolean // Vapi/OpenAI connection status
+      elevenlabs: boolean // ElevenLabs connection status
+      vapiError?: string // Vapi connection error message
+      elevenlabsError?: string // ElevenLabs connection error message
+      networkError?: boolean // Network connectivity issue
+    }
+  }
 }
 
 // COMPONENT PROPS TYPES

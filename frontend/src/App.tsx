@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MessageSquare, Wifi, WifiOff } from 'lucide-react'
 import Header from '@/components/Header'
 import ChatInterface from '@/components/ChatInterface'
@@ -17,13 +17,29 @@ function App() {
     error: null,
   })
 
-  // Check backend connectivity on app load
+  // Ref to store the health check interval
+  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Check backend connectivity on app load and set up periodic checks
   useEffect(() => {
     checkBackendConnection()
+    
+    // Set up periodic health checks every 10 seconds
+    healthCheckIntervalRef.current = setInterval(() => {
+      console.log('⏰ Running periodic health check...')
+      checkBackendConnectionSilent()
+    }, 10000)
+
+    // Cleanup interval on component unmount
+    return () => {
+      if (healthCheckIntervalRef.current) {
+        clearInterval(healthCheckIntervalRef.current)
+      }
+    }
   }, [])
 
   /**
-   * Check if the backend is accessible and healthy
+   * Check if the backend is accessible and healthy (with loading state)
    */
   const checkBackendConnection = async () => {
     try {
@@ -32,11 +48,36 @@ function App() {
       const health = await apiService.getHealth()
       devLog('Health check response:', health)
       
+      // Determine connection status based on service health
+      const isConnected = health.status !== 'critical' && !health.connectionDetails?.networkError
+      let errorMessage = null
+      
+      // Create meaningful error messages based on service status
+      if (health.status === 'critical') {
+        if (health.connectionDetails?.networkError) {
+          errorMessage = 'Unable to connect to NovaVA backend. Please ensure the server is running.'
+        } else if (!health.connectionDetails?.vapi && !health.connectionDetails?.elevenlabs) {
+          errorMessage = 'Critical services unavailable: Both OpenAI and ElevenLabs are disconnected.'
+        } else if (!health.connectionDetails?.vapi) {
+          errorMessage = 'OpenAI/Vapi service unavailable. Chat functionality may not work.'
+        } else {
+          errorMessage = 'Critical system error. Please check service configuration.'
+        }
+      } else if (health.status === 'degraded') {
+        const degradedServices = []
+        if (!health.connectionDetails?.vapi) degradedServices.push('Chat AI')
+        if (!health.connectionDetails?.elevenlabs) degradedServices.push('Voice TTS')
+        if (degradedServices.length > 0) {
+          errorMessage = `Some services unavailable: ${degradedServices.join(', ')}. Limited functionality may be available.`
+        }
+      }
+      
       setAppState(prev => ({
         ...prev,
-        isConnected: true,
+        isConnected,
         isLoading: false,
-        error: null,
+        error: errorMessage,
+        healthStatus: health,
       }))
     } catch (error) {
       console.error('Backend connection failed:', error)
@@ -45,6 +86,101 @@ function App() {
         isConnected: false,
         isLoading: false,
         error: 'Unable to connect to NovaVA backend. Please ensure the server is running.',
+        healthStatus: {
+          status: 'critical',
+          services: {},
+          errors: [(error as any)?.message || 'Network connection failed'],
+          connectionDetails: {
+            vapi: false,
+            elevenlabs: false,
+            networkError: true
+          }
+        }
+      }))
+    }
+  }
+
+  /**
+   * Check backend connection silently (for periodic updates without loading state)
+   */
+  const checkBackendConnectionSilent = async () => {
+    try {
+      const health = await apiService.getHealth()
+      devLog('Silent health check response:', health)
+      
+      // Determine connection status based on service health
+      const isConnected = health.status !== 'critical' && !health.connectionDetails?.networkError
+      let errorMessage = null
+      
+      // Create meaningful error messages based on service status
+      if (health.status === 'degraded') {
+        const degradedServices = []
+        if (!health.connectionDetails?.vapi) degradedServices.push('Chat AI')
+        if (!health.connectionDetails?.elevenlabs) degradedServices.push('Voice TTS')
+        if (degradedServices.length > 0) {
+          errorMessage = `Some services unavailable: ${degradedServices.join(', ')}. Limited functionality may be available.`
+        }
+      }
+      
+      // Only update if connection status changed or health details changed
+      setAppState(prev => {
+        const statusChanged = prev.isConnected !== isConnected
+        const healthChanged = JSON.stringify(prev.healthStatus) !== JSON.stringify(health)
+        
+        if (statusChanged || healthChanged) {
+          if (statusChanged && isConnected) {
+            console.log('🟢 Backend connection restored - updating UI')
+          } else if (statusChanged && !isConnected) {
+            console.log('🔴 Backend services degraded - updating UI')
+          }
+          
+          return { 
+            ...prev, 
+            isConnected, 
+            error: errorMessage,
+            healthStatus: health
+          }
+        }
+        return prev
+      })
+    } catch (error) {
+      console.log('🔴 Silent health check failed:', error)
+      
+      // Only update connection status if it changed
+      setAppState(prev => {
+        if (prev.isConnected) {
+          console.log('🔴 Backend connection lost - updating UI')
+          return { 
+            ...prev, 
+            isConnected: false,
+            error: 'Connection to backend lost. Attempting to reconnect...',
+            healthStatus: {
+              status: 'critical',
+              services: {},
+              errors: [(error as any)?.message || 'Network connection failed'],
+              connectionDetails: {
+                vapi: false,
+                elevenlabs: false,
+                networkError: true
+              }
+            }
+          }
+        }
+        return prev
+      })
+    }
+  }
+
+  /**
+   * Handle API errors to detect connection issues
+   */
+  const handleApiError = (error: any) => {
+    // Check if this is a network/connection error
+    if (error?.code === 'NETWORK_ERROR' || (typeof error?.message === 'string' && error.message.includes('Network error'))) {
+      setAppState(prev => ({
+        ...prev,
+        isConnected: false,
+        error: 'Connection to backend lost. Attempting to reconnect...'
       }))
     }
   }
@@ -91,27 +227,59 @@ function App() {
   }
 
   /**
-   * Connection status indicator
+   * Enhanced connection status indicator with service details
    */
-  const ConnectionStatus = () => (
-    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-      appState.isConnected
-        ? 'bg-success-100 text-success-700'
-        : 'bg-error-100 text-error-700'
-    }`}>
-      {appState.isConnected ? (
-        <>
-          <Wifi className="w-4 h-4" />
-          Connected
-        </>
-      ) : (
-        <>
-          <WifiOff className="w-4 h-4" />
-          Disconnected
-        </>
-      )}
-    </div>
-  )
+  const ConnectionStatus = () => {
+    const { isConnected, healthStatus } = appState
+    const health = healthStatus
+    
+    // Determine status color and text based on overall health
+    const getStatusConfig = () => {
+      if (!isConnected || health?.status === 'critical') {
+        return {
+          bgClass: 'bg-error-100 text-error-700',
+          icon: <WifiOff className="w-4 h-4" />,
+          text: 'Disconnected'
+        }
+      } else if (health?.status === 'degraded') {
+        return {
+          bgClass: 'bg-warning-100 text-warning-700',
+          icon: <Wifi className="w-4 h-4" />,
+          text: 'Limited'
+        }
+      } else {
+        return {
+          bgClass: 'bg-success-100 text-success-700',
+          icon: <Wifi className="w-4 h-4" />,
+          text: 'Connected'
+        }
+      }
+    }
+    
+    const statusConfig = getStatusConfig()
+    
+    return (
+      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusConfig.bgClass}`}>
+        {statusConfig.icon}
+        {statusConfig.text}
+        
+        {/* Show service details on hover */}
+        {health && (
+          <div className="hidden md:inline-flex items-center gap-1 ml-2 text-xs opacity-75">
+            {/* Vapi/OpenAI status */}
+            <span title={health.connectionDetails?.vapiError || 'AI Chat Service'}>
+              🤖 {health.connectionDetails?.vapi ? '✓' : '✗'}
+            </span>
+            
+            {/* ElevenLabs status */}
+            <span title={health.connectionDetails?.elevenlabsError || 'Voice TTS Service'}>
+              🔊 {health.connectionDetails?.elevenlabs ? '✓' : '✗'}
+            </span>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   /**
    * Loading screen
@@ -183,6 +351,7 @@ function App() {
           onCreateSession={createNewSession}
           onUpdateSession={updateCurrentSession}
           isConnected={appState.isConnected}
+          onApiError={handleApiError}
         />
       </main>
       
