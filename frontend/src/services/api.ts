@@ -33,7 +33,7 @@ import type {
 
 // AXIOS CONFIGURATION: Configure axios instance for backend communication
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://atiftraderbackend.onrender.com/api', // Use local development server for testing
+  baseURL: import.meta.env.VITE_API_URL || 'https://novavabackend.onrender.com', // Use local development server for testing
   timeout: 30000, // 30 seconds timeout to match backend Vapi API timeouts
   headers: {
     'Content-Type': 'application/json', // JSON content type for all requests
